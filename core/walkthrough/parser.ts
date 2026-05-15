@@ -147,14 +147,18 @@ export function parseLab(markdownPath: string): ParsedLab {
 
 function buildCodeBlock(b: RawBlock, lines: string[]): CodeBlock {
   // Capture up to 5 non-blank lines of prose before the opening fence.
+  // b.fenceLine is 1-indexed and points AT the opening fence row, so we walk
+  // backward starting from the line BEFORE it. The fence-detection regex must
+  // tolerate leading whitespace because lab markdown indents fences inside
+  // numbered list items.
   const before: string[] = [];
-  for (let i = b.fenceLine - 1; i >= 0 && before.length < 8; i--) {
+  for (let i = b.fenceLine - 2; i >= 0 && before.length < 8; i--) {
     const l = lines[i].trim();
     if (l === '') {
       if (before.length > 0) break;
       continue;
     }
-    if (/^```/.test(lines[i])) break;
+    if (/^\s*```/.test(lines[i])) break;
     before.unshift(l);
   }
   const after: string[] = [];
@@ -165,7 +169,7 @@ function buildCodeBlock(b: RawBlock, lines: string[]): CodeBlock {
       if (after.length > 0) break;
       continue;
     }
-    if (/^```/.test(lines[i])) break;
+    if (/^\s*```/.test(lines[i])) break;
     after.push(l);
   }
   const precedingText = before.join('\n');
