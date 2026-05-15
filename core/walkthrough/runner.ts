@@ -307,6 +307,11 @@ export class WalkthroughRunner {
       this.outputCache,
       this.ctx.env as Record<string, string>,
     );
+    // If the block clones the canonical lab repo and we have a local copy
+    // (LAB_REPO_ROOT), replace the clone with a `cp -r` of that local copy.
+    // The local copy carries the framework-side patches (validation regex,
+    // userXX naming, missing cd commands) that we haven't pushed upstream.
+    command = redirectLabRepoCloneToLocal(command, this.ctx.env as Record<string, string>);
     const r = await this.shell!.run(command);
     const status = r.exitCode === 0 ? 'ran' : 'failed';
 
@@ -361,6 +366,33 @@ export class WalkthroughRunner {
       notes: r.timedOut ? ['command timed out'] : undefined,
     };
   }
+}
+
+/**
+ * If LAB_REPO_ROOT is set in the run env AND the block clones the canonical
+ * lab repo (Advanced_Terraform), rewrite the clone to a local copy of
+ * LAB_REPO_ROOT. Lets us iterate on lab patches without round-tripping
+ * through a git push to the upstream lab repo.
+ *
+ * Idempotent: if LAB_REPO_ROOT isn't set or the block doesn't contain a
+ * matching clone, returns the input unchanged.
+ */
+export function redirectLabRepoCloneToLocal(
+  command: string,
+  env: Record<string, string>,
+): string {
+  const repoRoot = env.LAB_REPO_ROOT;
+  if (!repoRoot) return command;
+  // Match `git clone https://github.com/<org>/Advanced_Terraform.git [target]`
+  // optionally with --depth, branch, or other flags. We rewrite to a
+  // `rm -rf` + `cp -r` so a re-run from a wiped workspace still works.
+  return command.replace(
+    /git\s+clone(\s+--[a-z0-9-]+(?:\s+\S+)?)*\s+https:\/\/github\.com\/[^/]+\/Advanced_Terraform(?:\.git)?(\s+(\S+))?/g,
+    (_match, _flags, _grp, dest) => {
+      const target = dest || 'Advanced_Terraform';
+      return `rm -rf ${target} && cp -r ${repoRoot} ${target}`;
+    },
+  );
 }
 
 /**
