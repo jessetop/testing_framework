@@ -274,7 +274,10 @@ export class WalkthroughRunner {
       const cwd = this.shell!.getCwd();
       const targetAbs = path.isAbsolute(block.targetPath!) ? block.targetPath! : path.join(cwd, block.targetPath!);
       fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
-      const result = applyFileContent(targetAbs, block.content, { substitutions: this.outputCache });
+      const result = applyFileContent(targetAbs, block.content, {
+        substitutions: this.outputCache,
+        env: this.ctx.env as Record<string, string>,
+      });
       return {
         block, status: 'wrote',
         stdout: '', stderr: '', exitCode: 0,

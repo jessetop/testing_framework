@@ -29,12 +29,29 @@ export interface ApplyResult {
 export function applyFileContent(
   filePath: string,
   blockContent: string,
-  options: { substitutions?: Record<string, string> } = {},
+  options: { substitutions?: Record<string, string>; env?: Record<string, string> } = {},
 ): ApplyResult {
   const normalized = blockContent.replace(/\r\n/g, '\n');
-  const withSubs = options.substitutions
-    ? applyKeySubstitutions(normalized, options.substitutions)
-    : normalized;
+  const dedented = dedentBlock(normalized);
+  const subs = options.substitutions || {};
+  const env = options.env || {};
+
+  // Identity values (student_id, account, region) are not terraform outputs —
+  // they come from the run environment. Surface them as key substitutions too
+  // so `student_id = "student07"` in a lab block gets rewritten to whatever
+  // student we're impersonating.
+  const studentId = env.TERRAFORM_STUDENT_ID || env.STUDENT || env.USER;
+  const region = env.AWS_REGION || env.TERRAFORM_REGION;
+  const identitySubs: Record<string, string> = {};
+  if (studentId) {
+    identitySubs.student_id = studentId;
+    identitySubs.account = studentId;  // labs use account as a `${student_id}` alias
+  }
+  if (region) identitySubs.region = region;
+
+  const allSubs = { ...identitySubs, ...subs };  // explicit subs win over identity
+  let withSubs = applyKeySubstitutions(dedented, allSubs);
+  withSubs = applyPlaceholderSubstitutions(withSubs, allSubs, env);
 
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, withSubs);
@@ -184,6 +201,86 @@ export function applyKeySubstitutions(content: string, subs: Record<string, stri
     result = result.replace(re, (_match, prefix, suffix) => `${prefix}"${value}"${suffix}`);
   }
   return result;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Dedent — lab markdown nests fenced blocks under numbered list items and
+// preserves the indentation. Strip the common leading whitespace so the
+// emitted file isn't oddly indented.
+// ──────────────────────────────────────────────────────────────────────────
+
+export function dedentBlock(content: string): string {
+  const lines = content.split('\n');
+  let minIndent = Infinity;
+  for (const l of lines) {
+    if (l.trim() === '') continue;  // ignore blank lines for indent calc
+    const m = l.match(/^(\s*)/);
+    const indent = m ? m[1].length : 0;
+    if (indent < minIndent) minIndent = indent;
+  }
+  if (!isFinite(minIndent) || minIndent === 0) return content;
+  return lines.map((l) => (l.length >= minIndent ? l.slice(minIndent) : l)).join('\n');
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Angle-bracket placeholder substitutions
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Replace lab placeholders like `<paste-the-state_bucket_name-output-here>`
+ * and `<your-assigned-region>` with values pulled from the cached terraform
+ * outputs and the run environment.
+ *
+ * Recognized forms:
+ *   <paste-NAME-output-here>            → outputs[NAME]
+ *   <paste-the-NAME-output-here>        → outputs[NAME]
+ *   <your-state-bucket-from-terraform-output> → outputs.state_bucket_name
+ *   <your-state-bucket-name>            → outputs.state_bucket_name
+ *   <your-bucket-name>                  → outputs.state_bucket_name (fallback)
+ *   <your-assigned-region>              → env.AWS_REGION
+ *   <student_id>                        → env.TERRAFORM_STUDENT_ID
+ *
+ * Anything we can't resolve is left as-is — the runner will surface a
+ * "placeholder still present" error when terraform fails to parse the file
+ * (or we'll add an explicit check). Leaving it makes the failure visible
+ * rather than silently writing the wrong value.
+ */
+export function applyPlaceholderSubstitutions(
+  content: string,
+  outputs: Record<string, string>,
+  env: Record<string, string>,
+): string {
+  return content.replace(/<([a-z0-9_][a-z0-9_.-]*)>/gi, (match, inner) => {
+    const lookup = resolvePlaceholder(inner, outputs, env);
+    return lookup ?? match;
+  });
+}
+
+function resolvePlaceholder(
+  inner: string,
+  outputs: Record<string, string>,
+  env: Record<string, string>,
+): string | undefined {
+  // Form: paste-NAME-output-here  or  paste-the-NAME-output-here
+  let m = inner.match(/^paste-(?:the-)?([a-z_][a-z0-9_]*)-output-here$/i);
+  if (m && outputs[m[1]]) return outputs[m[1]];
+
+  // Specific named placeholders used in Terraform Day 3 labs.
+  switch (inner.toLowerCase()) {
+    case 'your-state-bucket-from-terraform-output':
+    case 'your-state-bucket-name':
+    case 'your-bucket-name':
+      return outputs.state_bucket_name;
+    case 'your-assigned-region':
+      return env.AWS_REGION || env.TERRAFORM_REGION;
+    case 'student_id':
+      return env.TERRAFORM_STUDENT_ID || env.STUDENT || env.USER;
+  }
+
+  // Last-ditch: <name> where `name` is a direct output key (e.g. `<public_ip>`).
+  if (outputs[inner]) return outputs[inner];
+
+  return undefined;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
