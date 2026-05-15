@@ -386,9 +386,11 @@ export function redirectLabRepoCloneToLocal(
   // Match `git clone https://github.com/<org>/Advanced_Terraform.git [target]`
   // optionally with --depth, branch, or other flags. We rewrite to a
   // `rm -rf` + `cp -r` so a re-run from a wiped workspace still works.
+  // Match within a single line: use [ \t] instead of \s so the optional dest
+  // doesn't swallow the next line's command.
   return command.replace(
-    /git\s+clone(\s+--[a-z0-9-]+(?:\s+\S+)?)*\s+https:\/\/github\.com\/[^/]+\/Advanced_Terraform(?:\.git)?(\s+(\S+))?/g,
-    (_match, _flags, _grp, dest) => {
+    /git[ \t]+clone(?:[ \t]+--[a-z0-9-]+(?:[ \t]+\S+)?)*[ \t]+https:\/\/github\.com\/[^/]+\/Advanced_Terraform(?:\.git)?(?:[ \t]+([^ \t\n]+))?/g,
+    (_match, dest) => {
       const target = dest || 'Advanced_Terraform';
       return `rm -rf ${target} && cp -r ${repoRoot} ${target}`;
     },
