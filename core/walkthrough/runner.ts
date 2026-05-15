@@ -99,6 +99,11 @@ export class WalkthroughRunner {
   private async runStep(step: ParsedStep): Promise<StepResult> {
     const strategy = (this.ctx.stepStrategies[step.stepId] || 'local-cli') as StepStrategy;
     const start = Date.now();
+    // Diagnostic — prints to stdout as soon as a step begins so logs make
+    // hangs visible. Without this, only manual-checkpoint steps emit any
+    // output and a wedge in the middle of an auto-executed step looks
+    // identical to "still running".
+    console.log(`>> step ${step.stepId} [${strategy}] ${step.title.slice(0, 70)} (${step.blocks.length} blocks)`);
 
     // Manual-only strategy: print prompt + pause / skip.
     if (ALWAYS_MANUAL.includes(strategy)) {
