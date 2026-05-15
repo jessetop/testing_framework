@@ -91,6 +91,61 @@ function printFindings(findings: Finding[]): void {
   console.log('──────────────────────────────────────────────────────────────────────\n');
 }
 
+/**
+ * Best-effort cleanup of orphaned AWS resources from a prior failed run.
+ * Scope is intentionally tight: only resources whose name starts with the
+ * student id (e.g. studentNN-terraform-state-XXXX). Errors are swallowed so
+ * a fresh account or partial cleanup doesn't block the run.
+ */
+async function preRunAwsCleanup(opts: { studentId: string; region: string }): Promise<void> {
+  const { studentId, region } = opts;
+  console.log(`Pre-run AWS cleanup (student=${studentId}, region=${region})...`);
+  const exec = (cmd: string): string => {
+    try { return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'] }).toString(); }
+    catch { return ''; }
+  };
+
+  // 1. SSM parameters under /studentId/  — scan a few common regions because
+  //    labs sometimes run in us-east-2 / us-west-2.
+  const regions = Array.from(new Set([region, 'us-east-1', 'us-east-2']));
+  for (const r of regions) {
+    const out = exec(`aws ssm describe-parameters --region ${r} --parameter-filters "Key=Name,Option=BeginsWith,Values=/${studentId}/" --query "Parameters[].Name" --output text`);
+    const names = out.split(/\s+/).filter(Boolean);
+    for (const name of names) {
+      console.log(`  · ssm delete /${name} in ${r}`);
+      exec(`aws ssm delete-parameter --name "${name}" --region ${r}`);
+    }
+  }
+
+  // 2. S3 buckets prefixed studentNN-terraform-state-
+  const buckets = exec(`aws s3api list-buckets --query "Buckets[?starts_with(Name, '${studentId}-')].Name" --output text`)
+    .split(/\s+/).filter(Boolean);
+  for (const b of buckets) {
+    console.log(`  · s3 empty + remove ${b}`);
+    // Versioned bucket — need to delete all versions + delete markers first.
+    const versionsJson = exec(`aws s3api list-object-versions --bucket "${b}" --output json`);
+    if (versionsJson) {
+      try {
+        const v = JSON.parse(versionsJson) as { Versions?: any[]; DeleteMarkers?: any[] };
+        const objs = [...(v.Versions || []), ...(v.DeleteMarkers || [])]
+          .map((o) => ({ Key: o.Key, VersionId: o.VersionId }));
+        for (let i = 0; i < objs.length; i += 1000) {
+          const batch = objs.slice(i, i + 1000);
+          const payload = JSON.stringify({ Objects: batch, Quiet: true });
+          // Write to a tmp file because the JSON has nested quotes that the shell mangles.
+          const tmpFile = path.join(require('os').tmpdir(), `del-${Date.now()}.json`);
+          fs.writeFileSync(tmpFile, payload);
+          exec(`aws s3api delete-objects --bucket "${b}" --delete file://${tmpFile}`);
+          fs.unlinkSync(tmpFile);
+        }
+      } catch { /* swallow */ }
+    }
+    exec(`aws s3 rb "s3://${b}" --force`);
+  }
+
+  console.log('Pre-run cleanup done.\n');
+}
+
 function loadInventory(course: string, labNumber: number): LabInventory {
   const file = path.join(__dirname, '..', 'courses', course, `lab${labNumber}.inventory.ts`);
   if (!fs.existsSync(file)) {
@@ -161,6 +216,12 @@ async function main(): Promise<void> {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   }
   fs.mkdirSync(workspaceRoot, { recursive: true });
+
+  // Pre-run AWS cleanup — labs share an account, so orphaned resources from a
+  // failed prior run cascade into "already exists" errors. We narrowly delete
+  // resources prefixed/scoped to the current student id. Failures are logged
+  // and tolerated (e.g. nothing to clean).
+  await preRunAwsCleanup({ studentId, region });
 
   const ctx = {
     course: args.course,
