@@ -221,6 +221,19 @@ async function main(): Promise<void> {
   }
   fs.mkdirSync(workspaceRoot, { recursive: true });
 
+  // Pre-stage the lab repo into the workspace. Labs 2+ assume the prior lab
+  // already cloned Advanced_Terraform/ — when running them standalone, the
+  // workspace is empty and the first `cd ~/Advanced_Terraform/...` blows up.
+  // If LAB_REPO_ROOT points at a local checkout, copy it into the workspace
+  // so the cd's find what they expect.
+  const labRepoRoot = process.env.LAB_REPO_ROOT;
+  if (labRepoRoot && fs.existsSync(labRepoRoot)) {
+    const dest = path.join(workspaceRoot, path.basename(labRepoRoot));
+    if (!fs.existsSync(dest)) {
+      execSync(`cp -r "${labRepoRoot}" "${dest}"`, { stdio: 'pipe' });
+    }
+  }
+
   // Pre-run AWS cleanup — labs share an account, so orphaned resources from a
   // failed prior run cascade into "already exists" errors. We narrowly delete
   // resources prefixed/scoped to the current student id. Failures are logged
@@ -245,6 +258,10 @@ async function main(): Promise<void> {
       TERRAFORM_STUDENT_ID: studentId,
       TERRAFORM_REGION: region,
       AWS_REGION: region,
+      // Some labs use DEPLOY_REGION as the canonical region var (lab 2's
+      // aws-cli probes especially). Mirror AWS_REGION into it so the labs
+      // work whether they reach for AWS_REGION or DEPLOY_REGION.
+      DEPLOY_REGION: region,
       // Pass LAB_REPO_ROOT through so the runner's clone-redirect knows
       // where the locally-patched copy of the lab repo lives.
       ...(process.env.LAB_REPO_ROOT ? { LAB_REPO_ROOT: process.env.LAB_REPO_ROOT } : {}),
