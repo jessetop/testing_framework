@@ -18,6 +18,7 @@ import {
 } from './types';
 import { PersistentShell } from './shell';
 import { WalkthroughBrowser, extractConsoleUrl } from './browser';
+import { applyFileContent, parseTerraformOutput } from './file-apply';
 
 /** Strategies that always require human intervention (no automation path). */
 const ALWAYS_MANUAL: StepStrategy[] = ['manual-only'];
@@ -42,6 +43,13 @@ export class WalkthroughRunner {
   private shell?: PersistentShell;
   private browser?: WalkthroughBrowser;
   private opts: RunnerRuntimeOptions = {};
+  /**
+   * Lab-wide cache of key→value pairs captured from `terraform output`
+   * calls. When a later file-content block writes `state_bucket_name = "..."`,
+   * the runner substitutes the cached value so the lab's literal placeholder
+   * (e.g. `studentXX-terraform-state-abc123`) becomes the real bucket name.
+   */
+  private outputCache: Record<string, string> = {};
 
   constructor(private parsedLab: ParsedLab, private ctx: RunContext) {}
 
@@ -266,18 +274,40 @@ export class WalkthroughRunner {
       const cwd = this.shell!.getCwd();
       const targetAbs = path.isAbsolute(block.targetPath!) ? block.targetPath! : path.join(cwd, block.targetPath!);
       fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
-      fs.writeFileSync(targetAbs, block.content);
+      const result = applyFileContent(targetAbs, block.content, { substitutions: this.outputCache });
       return {
         block, status: 'wrote',
         stdout: '', stderr: '', exitCode: 0,
         durationMs: Date.now() - start,
         filePath: targetAbs,
+        notes: [`strategy: ${result.strategy}; ${result.changes.join(', ')}`],
       };
     }
 
     // execute
     const r = await this.shell!.run(block.content);
     const status = r.exitCode === 0 ? 'ran' : 'failed';
+
+    // Capture `terraform output` values into the cache so later file-content
+    // blocks can substitute placeholders (e.g. studentXX-terraform-state-abc123
+    // → the real bucket name from this step's output).
+    if (status === 'ran' && /\bterraform\s+output\b/.test(block.content)) {
+      const outputs = parseTerraformOutput(r.stdout);
+      Object.assign(this.outputCache, outputs);
+    }
+    // Also capture `terraform output -raw <name>` where stdout is just the
+    // value. Grep the command for `-raw <name>`.
+    if (status === 'ran') {
+      const rawMatches = [...block.content.matchAll(/terraform\s+output\s+-raw\s+([a-z_][a-z0-9_]*)/gi)];
+      if (rawMatches.length === 1) {
+        const name = rawMatches[0][1];
+        const value = r.stdout.trim();
+        if (value && !value.includes('\n') && value.length < 200) {
+          this.outputCache[name] = value;
+        }
+      }
+    }
+
     return {
       block, status,
       stdout: r.stdout,

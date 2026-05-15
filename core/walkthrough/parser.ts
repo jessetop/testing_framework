@@ -190,7 +190,6 @@ function classify(
   _following: string,
 ): { classification: BlockKind; targetPath?: string } {
   const lang = b.lang.toLowerCase();
-  const precedingLower = preceding.toLowerCase();
   const lastPrecedingLine = preceding.split('\n').pop() || '';
 
   // 1. Expected output? Preceding text says "Expected output", "Expected:", "you should see", etc.
@@ -206,13 +205,28 @@ function classify(
     return { classification: 'expected-output' };
   }
 
-  // 2. File-content? Preceding text says "Create `filename.tf`:" or similar.
-  const createMatch = lastPrecedingLine.match(/(?:create|open|edit|update|add\s+to)\s+`([^`]+\.(?:tf|tfvars|json|yaml|yml|sh|hcl|md))`\s*:?\s*$/i);
-  if (createMatch) {
-    return { classification: 'file-content', targetPath: createMatch[1] };
+  // 2. File-content from strict "Create `X.tf`:" form (filename at end of preceding line).
+  const strictMatch = lastPrecedingLine.match(/(?:create|open|edit|update|add\s+to)\s+`([^`]+\.(?:tf|tfvars|json|yaml|yml|sh|hcl|md))`\s*:?\s*$/i);
+  if (strictMatch) {
+    return { classification: 'file-content', targetPath: strictMatch[1] };
   }
 
-  // 3. HCL block whose first line is a path comment (`# foo.tf`) and language is hcl — treat as file content
+  // 3. File-content from loose "Open `X.tf` and set/paste/configure ... :" form. Lab markdown often
+  //    embeds the file mention mid-sentence, then ends with a colon before the block. Catches:
+  //      "Open `terraform.tfvars` and set both variables to your assigned student ID. ...:"
+  //      "Open `providers.tf` and configure your backend. **Paste the bucket name...**:"
+  //      "Edit `terraform.tfvars` — uncomment `state_bucket_name`:"
+  //    Only fires for HCL-like blocks (otherwise it'd over-match bash blocks).
+  if (['hcl', 'terraform', 'tf'].includes(lang)) {
+    const looseMatch = preceding.match(
+      /(?:create|open|edit|update|add\s+to|fill\s+in|paste\s+(?:in|into)?|configure)\s+`([^`]+\.(?:tf|tfvars|json|yaml|yml|sh|hcl|md))`/i,
+    );
+    if (looseMatch && lastPrecedingLine.trim().endsWith(':')) {
+      return { classification: 'file-content', targetPath: looseMatch[1] };
+    }
+  }
+
+  // 4. HCL block whose first line is a path comment (`# foo.tf`) and language is hcl — treat as file content
   //    targeting that filename in current cwd.
   if (['hcl', 'terraform', 'tf'].includes(lang)) {
     const firstLine = b.content.split('\n')[0].trim();
