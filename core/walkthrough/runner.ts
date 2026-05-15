@@ -308,21 +308,31 @@ export class WalkthroughRunner {
       Object.assign(this.outputCache, outputs);
     }
     // Also capture single-output forms where the command names exactly one
-    // output and stdout is the (possibly quoted) value:
+    // output and stdout IS the (possibly quoted) value:
     //   terraform output -raw NAME    → unquoted value
     //   terraform output NAME         → quoted string value like "abc"
+    //
+    // IMPORTANT: Only consider matches that appear as a top-level command in
+    // the block (start of a non-comment line). Otherwise an embedded use like
+    //   aws s3 ls "s3://$(terraform output -raw state_bucket_name)/" ...
+    // would steal the block's stdout (the `aws s3 ls` output) and cache it
+    // under `state_bucket_name`, poisoning later substitutions.
     if (status === 'ran') {
-      const rawMatches = [...block.content.matchAll(/terraform\s+output\s+-raw\s+([a-z_][a-z0-9_]*)/gi)];
-      const positionalMatches = [...block.content.matchAll(/(?:^|\s|;|&&|\|)terraform\s+output\s+([a-z_][a-z0-9_]*)(?!\s*=)/gi)];
-      const captures: Array<{ name: string; raw: boolean }> = [
-        ...rawMatches.map((m) => ({ name: m[1], raw: true })),
-        ...positionalMatches.map((m) => ({ name: m[1], raw: false })),
-      ];
-      // Only attempt if there's exactly one capture in the block (stdout is one value).
-      if (captures.length === 1) {
-        const { name, raw } = captures[0];
+      const topLevelTerraformOutputCmds: Array<{ name: string; raw: boolean }> = [];
+      for (const rawLine of block.content.split('\n')) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) continue;
+        const raw = line.match(/^terraform\s+output\s+-raw\s+([a-z_][a-z0-9_]*)\s*$/i);
+        if (raw) { topLevelTerraformOutputCmds.push({ name: raw[1], raw: true }); continue; }
+        const positional = line.match(/^terraform\s+output\s+([a-z_][a-z0-9_]*)\s*$/i);
+        if (positional) topLevelTerraformOutputCmds.push({ name: positional[1], raw: false });
+      }
+      // Only safe to cache when the block contains exactly one of these and
+      // nothing else of consequence — otherwise stdout isn't just the value.
+      const meaningfulLines = block.content.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#'));
+      if (topLevelTerraformOutputCmds.length === 1 && meaningfulLines.length === 1) {
+        const { name, raw } = topLevelTerraformOutputCmds[0];
         let value = r.stdout.trim();
-        // Strip surrounding double quotes for the non-raw form.
         if (!raw && value.startsWith('"') && value.endsWith('"')) {
           value = value.slice(1, -1);
         }
