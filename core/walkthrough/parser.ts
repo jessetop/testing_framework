@@ -105,13 +105,17 @@ export function parseLab(markdownPath: string): ParsedLab {
       currentTaskTitle = l.replace(/^##\s+/, '').trim();
     }
 
-    // Numbered list item at top level: line starts with optional 0-3 spaces, then digits, then ". **"
-    const stepMatch = l.match(/^( {0,3})(\d+)\.\s+\*\*([^*]+?)\*\*\s*$/);
+    // Numbered list item: line starts with whitespace + digits + ". **".
+    // We accept any leading whitespace because lab markdown sometimes has
+    // re-numbered items at non-zero indent — being strict here silently
+    // merges multiple steps into one (the parent step absorbs the indented
+    // child's code blocks), masking validator bugs.
+    const stepMatch = l.match(/^\s*(\d+)\.\s+\*\*([^*]+?)\*\*\s*$/);
     if (stepMatch) {
       if (lastStep) lastStep.endLine = i;  // close prior step
       const s: StepBoundary = {
-        stepId: stepMatch[2],
-        title: stepMatch[3].trim(),
+        stepId: stepMatch[1],
+        title: stepMatch[2].trim(),
         startLine: i + 1,
         endLine: lines.length,  // closed when we see the next step or end
         taskTitle: currentTaskTitle,
