@@ -288,7 +288,8 @@ export class WalkthroughRunner {
     }
 
     // execute
-    const r = await this.shell!.run(block.content);
+    const command = autoApproveTerraform(block.content);
+    const r = await this.shell!.run(command);
     const status = r.exitCode === 0 ? 'ran' : 'failed';
 
     // Capture `terraform output` values into the cache so later file-content
@@ -320,6 +321,33 @@ export class WalkthroughRunner {
       notes: r.timedOut ? ['command timed out'] : undefined,
     };
   }
+}
+
+/**
+ * Auto-inject `-auto-approve` for `terraform apply` and `terraform destroy`,
+ * and `-force-copy` for `terraform init -migrate-state`. Lab markdown writes
+ * the bare command because a human types `yes` at the prompt; the walkthrough
+ * has no human, so an unflagged apply hangs at "Enter a value:" until the
+ * shell timeout fires (10 min). Skip lines already carrying the flag and
+ * skip lines inside heredocs / comment-only lines.
+ */
+export function autoApproveTerraform(command: string): string {
+  return command
+    .split('\n')
+    .map((line) => {
+      const stripped = line.replace(/^\s*#.*$/, '');
+      if (!stripped) return line;
+      // terraform apply / destroy — add -auto-approve if not already present.
+      if (/^\s*terraform\s+(apply|destroy)(\s|$)/.test(line) && !/-auto-approve\b/.test(line)) {
+        return line.replace(/(terraform\s+(?:apply|destroy))/, '$1 -auto-approve');
+      }
+      // terraform init -migrate-state — add -force-copy to skip "yes" prompt.
+      if (/^\s*terraform\s+init\b/.test(line) && /-migrate-state\b/.test(line) && !/-force-copy\b/.test(line)) {
+        return line.replace(/-migrate-state\b/, '-migrate-state -force-copy');
+      }
+      return line;
+    })
+    .join('\n');
 }
 
 /**
