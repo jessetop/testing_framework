@@ -74,6 +74,10 @@ export interface RunContext {
   /** Map step id → strategy from the inventory. Used by the runner to route
    *  execution. If a step isn't in the map, defaults to `local-cli`. */
   stepStrategies: Record<string, StepStrategy>;
+  /** Step ids whose blocks intentionally exit non-zero (e.g. workspace guard
+   *  precondition tests). A non-zero exit on a step in this set is treated
+   *  as `pass`, not `fail`. */
+  stepExpectFailure?: Record<string, boolean>;
   /** Optional: per-step manual decisions (skip / continue / auto-pass). */
   manualPolicy?: 'pause' | 'auto-skip' | 'fail';
 }

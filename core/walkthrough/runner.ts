@@ -131,11 +131,19 @@ export class WalkthroughRunner {
       }
     }
 
-    // Determine step status.
+    // Determine step status. If the inventory marked this step as
+    // expectFailure (e.g. workspace guard precondition test), a non-zero
+    // exit IS the success signal — flip fail → pass.
     const driftCount = blockResults.filter((b) => b.expectedMatched === false).length;
+    const expectsFailure = !!this.ctx.stepExpectFailure?.[step.stepId];
     let status: StepStatus;
-    if (failed) status = 'fail';
-    else if (driftCount > 0) status = 'drift';
+    if (failed && expectsFailure) status = 'pass';
+    else if (failed) status = 'fail';
+    else if (!failed && expectsFailure) {
+      // Expected to fail but didn't — that's actually a failure of the test.
+      status = 'fail';
+      firstError = firstError || 'step was expected to fail (expectFailure: true) but every block succeeded';
+    } else if (driftCount > 0) status = 'drift';
     else status = 'pass';
 
     return {

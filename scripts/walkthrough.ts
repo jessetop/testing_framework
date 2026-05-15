@@ -199,7 +199,11 @@ async function main(): Promise<void> {
 
   // Build run context.
   const stepStrategies: Record<string, string> = {};
-  for (const s of inventory.steps) stepStrategies[s.stepId] = s.strategy;
+  const stepExpectFailure: Record<string, boolean> = {};
+  for (const s of inventory.steps) {
+    stepStrategies[s.stepId] = s.strategy;
+    if (s.expectFailure) stepExpectFailure[s.stepId] = true;
+  }
 
   const studentId = process.env.TERRAFORM_STUDENT_ID || 'student99';
   const region = process.env.TERRAFORM_REGION || 'us-east-1';
@@ -244,6 +248,7 @@ async function main(): Promise<void> {
       ...(awsProfile ? { AWS_PROFILE: awsProfile } : {}),
     },
     stepStrategies: stepStrategies as Record<string, any>,
+    stepExpectFailure,
   };
 
   const runner = new WalkthroughRunner(parsed, ctx);

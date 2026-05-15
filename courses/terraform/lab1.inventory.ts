@@ -42,7 +42,7 @@ export const inventory: LabInventory = {
     { stepId: '6',  title: 'terraform workspace new dev/staging/prod', strategy: 'local-cli', tools: ['terraform'] },
     { stepId: '7',  title: 'terraform workspace select + show', strategy: 'local-cli', tools: ['terraform'] },
     { stepId: '8',  title: 'Review terraform.workspace usage in variables.tf', strategy: 'manual-only', notes: 'Read-only review of locals block selecting config per workspace' },
-    { stepId: '9',  title: 'Verify state isolation across workspaces (terraform state list)', strategy: 'local-cli', tools: ['terraform'] },
+    { stepId: '9',  title: 'Verify state isolation across workspaces (terraform state list)', strategy: 'local-cli', tools: ['terraform'], expectFailure: true, notes: 'Lab demonstrates empty state — terraform state list exits 1 with "No state file was found!" before any apply' },
     { stepId: '10', title: 'Delete prod workspace (cleanup)', strategy: 'local-cli', tools: ['terraform'] },
 
     // ── Task 2: Workspace Safety Guards ────────────────────────────────────
