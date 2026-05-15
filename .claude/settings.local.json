@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(aws ec2 describe-instances:*)",
+      "Bash(aws sts get-caller-identity:*)",
+      "Bash(cd:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm install)",
+      "Bash(dir:*)",
+      "Bash(npm run status:*)",
+      "Bash(npm run test:headed:*)",
+      "Bash(npm run unlock:*)",
+      "Bash(npm run cleanup:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(aws configure list:*)",
+      "Bash(aws ec2 describe-security-groups:*)",
+      "Bash(aws ec2 describe-key-pairs:*)",
+      "Bash(aws ec2 terminate-instances:*)",
+      "Bash(aws ec2:*)",
+      "Bash(mkdir -p \"I:/My Drive/CourseCreationKit/testing_framework/courses/anthropic/pages\")",
+      "Bash(mkdir -p \"I:/My Drive/CourseCreationKit/testing_framework/courses/anthropic/tests\")",
+      "Bash(node node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(npx --yes tsc --noEmit)",
+      "Bash(npx playwright:*)",
+      "Bash(cp:*)"
+    ]
+  }
+}

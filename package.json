@@ -1,0 +1,49 @@
+{
+  "name": "lab-testing-framework",
+  "version": "1.0.0",
+  "description": "Playwright-based lab testing framework for validating course labs",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:course": "playwright test --grep",
+    "codegen": "playwright codegen",
+    "report": "playwright show-report",
+    "check": "ts-node lab-registry.ts",
+    "check:splunk": "ts-node lab-registry.ts splunk",
+    "check:kiro": "ts-node lab-registry.ts kiro",
+    "check:anthropic": "ts-node lab-registry.ts anthropic",
+    "setup:anthropic-lab1": "ts-node scripts/setup-anthropic-lab1.ts",
+    "teardown:anthropic-lab1": "ts-node scripts/setup-anthropic-lab1.ts --teardown",
+    "setup:anthropic-lab3": "ts-node scripts/setup-anthropic-lab3.ts",
+    "teardown:anthropic-lab3": "ts-node scripts/setup-anthropic-lab3.ts --teardown",
+    "setup:anthropic-lab4": "ts-node scripts/setup-anthropic-lab4.ts",
+    "teardown:anthropic-lab4": "ts-node scripts/setup-anthropic-lab4.ts --teardown",
+    "setup:anthropic-lab5": "ts-node scripts/setup-anthropic-lab5.ts",
+    "teardown:anthropic-lab5": "ts-node scripts/setup-anthropic-lab5.ts --teardown",
+    "qa:anthropic-lab1": "COURSE_ASSETS_DIR=../CourseCreationKit/courses/Anthropic_on_Bedrock/assets/images/lab-screenshots/lab1 python core/qa/lab-qa-bot.py --lab-guide ../CourseCreationKit/courses/Anthropic_on_Bedrock/content/labs/Lab_1_Guide.md",
+    "screenshots:anthropic-lab1": "python core/qa/screenshot-capture.py --lab-guide ../CourseCreationKit/courses/Anthropic_on_Bedrock/content/labs/Lab_1_Guide.md --output-dir ../CourseCreationKit/courses/Anthropic_on_Bedrock/assets/images/lab-screenshots/lab1 --headless",
+    "qa:anthropic-lab2": "python core/qa/lab-qa-bot.py --lab-guide ../CourseCreationKit/courses/Anthropic_on_Bedrock/content/labs/Lab_2_Guide.md",
+    "qa:anthropic-lab3": "python core/qa/lab-qa-bot.py --lab-guide ../CourseCreationKit/courses/Anthropic_on_Bedrock/content/labs/Lab_3_Fintech_Guide.md",
+    "status": "ts-node scripts/status.ts",
+    "where": "ts-node scripts/where.ts",
+    "analyze": "ts-node scripts/analyze.ts",
+    "walkthrough": "ts-node scripts/walkthrough.ts",
+    "cleanup": "ts-node scripts/cleanup.ts",
+    "unlock": "ts-node scripts/unlock.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.0",
+    "@types/node": "^20.11.0",
+    "dotenv": "^16.4.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.3.0"
+  },
+  "author": "ROI Training",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1028.0",
+    "@aws-sdk/credential-providers": "^3.1028.0"
+  }
+}
