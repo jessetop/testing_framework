@@ -18,7 +18,7 @@ import {
 } from './types';
 import { PersistentShell } from './shell';
 import { WalkthroughBrowser, extractConsoleUrl } from './browser';
-import { applyFileContent, parseTerraformOutput } from './file-apply';
+import { applyFileContent, applyPlaceholderSubstitutions, parseTerraformOutput } from './file-apply';
 
 /** Strategies that always require human intervention (no automation path). */
 const ALWAYS_MANUAL: StepStrategy[] = ['manual-only'];
@@ -295,8 +295,18 @@ export class WalkthroughRunner {
       };
     }
 
-    // execute
-    const command = autoApproveTerraform(block.content);
+    // execute. Inject -auto-approve / -force-copy first, then resolve any
+    // angle-bracket placeholders (<paste-X-output-here>, <your-bucket-name>,
+    // ...) from the output cache + env. The same substitution we already
+    // run on file-content blocks — bash blocks reference the same
+    // placeholders, so leaving them raw produces invalid commands like
+    // `aws s3 ls s3://your-bucket-name/`.
+    let command = autoApproveTerraform(block.content);
+    command = applyPlaceholderSubstitutions(
+      command,
+      this.outputCache,
+      this.ctx.env as Record<string, string>,
+    );
     const r = await this.shell!.run(command);
     const status = r.exitCode === 0 ? 'ran' : 'failed';
 
