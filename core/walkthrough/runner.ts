@@ -299,13 +299,25 @@ export class WalkthroughRunner {
       const outputs = parseTerraformOutput(r.stdout);
       Object.assign(this.outputCache, outputs);
     }
-    // Also capture `terraform output -raw <name>` where stdout is just the
-    // value. Grep the command for `-raw <name>`.
+    // Also capture single-output forms where the command names exactly one
+    // output and stdout is the (possibly quoted) value:
+    //   terraform output -raw NAME    → unquoted value
+    //   terraform output NAME         → quoted string value like "abc"
     if (status === 'ran') {
       const rawMatches = [...block.content.matchAll(/terraform\s+output\s+-raw\s+([a-z_][a-z0-9_]*)/gi)];
-      if (rawMatches.length === 1) {
-        const name = rawMatches[0][1];
-        const value = r.stdout.trim();
+      const positionalMatches = [...block.content.matchAll(/(?:^|\s|;|&&|\|)terraform\s+output\s+([a-z_][a-z0-9_]*)(?!\s*=)/gi)];
+      const captures: Array<{ name: string; raw: boolean }> = [
+        ...rawMatches.map((m) => ({ name: m[1], raw: true })),
+        ...positionalMatches.map((m) => ({ name: m[1], raw: false })),
+      ];
+      // Only attempt if there's exactly one capture in the block (stdout is one value).
+      if (captures.length === 1) {
+        const { name, raw } = captures[0];
+        let value = r.stdout.trim();
+        // Strip surrounding double quotes for the non-raw form.
+        if (!raw && value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
         if (value && !value.includes('\n') && value.length < 200) {
           this.outputCache[name] = value;
         }
