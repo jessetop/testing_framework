@@ -51,7 +51,9 @@ console.log(fs.readFileSync(tfvarsPath, 'utf8'));
 console.log('--- providers.tf ---');
 console.log(fs.readFileSync(providersPath, 'utf8'));
 
-// Find Step 12's file-content blocks (tfvars + providers.tf per parser output).
+// Iterate through ALL file-content blocks in the lab to catch any classification miss.
+const targetSteps = parsed.steps.filter((s) => s.blocks.some((b) => b.classification === 'file-content'));
+console.log(`Steps with file-content blocks: ${targetSteps.map((s) => s.stepId).join(', ')}`);
 const step12 = parsed.steps.find((s) => s.stepId === '12');
 if (!step12) { console.error('Step 12 missing'); process.exit(1); }
 

@@ -129,7 +129,7 @@ function replaceHclBlock(existing: string, block: string): { merged: string; cha
   let blockStart = -1;
   let blockHeader = '';
   for (let i = 0; i < blockLines.length; i++) {
-    const m = blockLines[i].match(/^(terraform|provider|resource|data|module|output|variable)\s+("[^"]+"(?:\s+"[^"]+")?)?\s*\{/);
+    const m = blockLines[i].match(/^(terraform|provider|resource|data|module|output|variable|locals)\s+("[^"]+"(?:\s+"[^"]+")?)?\s*\{/);
     if (m) { blockStart = i; blockHeader = blockLines[i].split('{')[0].trim(); break; }
   }
   if (blockStart === -1) return null;
