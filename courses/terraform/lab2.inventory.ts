@@ -7,12 +7,13 @@
  */
 
 import { LabInventory } from '../../core/inventory';
+import { labSourcePath } from './lab-source';
 
 export const inventory: LabInventory = {
   course: 'terraform',
   labNumber: 2,
   labName: 'Import Day 1-2 Infrastructure into Remote State',
-  sourcePath: 'I:/My Drive/CourseCreationKit/courses/Terraform_Day_3/labforge_iterations/iteration_1/Lab_02_Import_Legacy_Application.md',
+  sourcePath: labSourcePath(2),
   sourceHash: '08b81378374196bce6d29ce93f70ee0a56ca841b4c49aea6340556ac4ea720f8',
 
   externalResources: [

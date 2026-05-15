@@ -9,12 +9,13 @@
  */
 
 import { LabInventory } from '../../core/inventory';
+import { labSourcePath } from './lab-source';
 
 export const inventory: LabInventory = {
   course: 'terraform',
   labNumber: 1,
   labName: 'Multi-Environment State Strategy',
-  sourcePath: 'I:/My Drive/CourseCreationKit/courses/Terraform_Day_3/labforge_iterations/iteration_1/Lab_01_Multi_Environment_State_Strategy.md',
+  sourcePath: labSourcePath(1),
   sourceHash: 'd7b039b7a6ee1e1d2300abc3b8f693a488955147ec3149a65b69adeca31964b9',
 
   externalResources: [
