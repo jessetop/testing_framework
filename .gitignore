@@ -4,5 +4,13 @@ dist/
 .state/
 test-results/
 playwright-report/
+_workspace/
 .env
 *.log
+.DS_Store
+
+# Test result artifacts that aren't meant for source control
+*.tfstate
+*.tfstate.backup
+**/.terraform/
+**/.terraform.lock.hcl
