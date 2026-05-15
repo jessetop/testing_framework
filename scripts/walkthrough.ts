@@ -245,6 +245,9 @@ async function main(): Promise<void> {
       TERRAFORM_STUDENT_ID: studentId,
       TERRAFORM_REGION: region,
       AWS_REGION: region,
+      // Pass LAB_REPO_ROOT through so the runner's clone-redirect knows
+      // where the locally-patched copy of the lab repo lives.
+      ...(process.env.LAB_REPO_ROOT ? { LAB_REPO_ROOT: process.env.LAB_REPO_ROOT } : {}),
       ...(awsProfile ? { AWS_PROFILE: awsProfile } : {}),
     },
     stepStrategies: stepStrategies as Record<string, any>,
