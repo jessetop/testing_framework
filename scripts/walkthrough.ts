@@ -148,7 +148,10 @@ async function main(): Promise<void> {
 
   const studentId = process.env.TERRAFORM_STUDENT_ID || 'student99';
   const region = process.env.TERRAFORM_REGION || 'us-east-1';
-  const awsProfile = process.env.AWS_PROFILE || 'roitraining';
+  // Only set AWS_PROFILE if explicitly provided. On EC2 with an IAM
+  // instance profile, no profile is needed and forcing one breaks
+  // ("failed to get shared config profile" errors from terraform/awscli).
+  const awsProfile = process.env.AWS_PROFILE;
 
   const workspaceRoot = path.resolve(__dirname, '..', '_workspace', `walkthrough-${args.course}-lab${args.labNumber}`, studentId);
   // Fresh workspace per run — lab Step 1 typically does `cd ~ && git clone`
@@ -176,8 +179,8 @@ async function main(): Promise<void> {
       STUDENT: studentId,
       TERRAFORM_STUDENT_ID: studentId,
       TERRAFORM_REGION: region,
-      AWS_PROFILE: awsProfile,
       AWS_REGION: region,
+      ...(awsProfile ? { AWS_PROFILE: awsProfile } : {}),
     },
     stepStrategies: stepStrategies as Record<string, any>,
   };
