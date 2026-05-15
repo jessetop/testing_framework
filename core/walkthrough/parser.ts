@@ -97,12 +97,20 @@ export function parseLab(markdownPath: string): ParsedLab {
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
 
-    // Track current ## Task heading.
-    const taskMatch = l.match(/^##\s+(?:Task|Part)\s+([A-Z0-9.]+)[.:]?\s*(.*)$/i);
-    if (taskMatch) {
-      currentTaskTitle = `${taskMatch[1]}: ${taskMatch[2]}`.trim();
-    } else if (/^##\s+/.test(l)) {
-      currentTaskTitle = l.replace(/^##\s+/, '').trim();
+    // Track current ## heading. A new H2 also CLOSES any in-flight step —
+    // illustrative bash blocks under a `## Troubleshooting` section (or
+    // similar appendix headings) must NOT be attributed to the previous
+    // numbered step, otherwise the runner executes them as if they were
+    // the student's commands.
+    const isH2 = /^##\s+/.test(l);
+    if (isH2) {
+      if (lastStep && lastStep.endLine === lines.length) lastStep.endLine = i;
+      const taskMatch = l.match(/^##\s+(?:Task|Part)\s+([A-Z0-9.]+)[.:]?\s*(.*)$/i);
+      if (taskMatch) {
+        currentTaskTitle = `${taskMatch[1]}: ${taskMatch[2]}`.trim();
+      } else {
+        currentTaskTitle = l.replace(/^##\s+/, '').trim();
+      }
     }
 
     // Numbered list item: line starts with whitespace + digits + ". **".
