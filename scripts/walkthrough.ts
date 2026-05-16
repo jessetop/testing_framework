@@ -329,12 +329,35 @@ function printSummary(r: RunReport): void {
 }
 
 function saveReport(r: RunReport, course: string, labNumber: number): void {
-  const dir = path.join(__dirname, '..', 'test-results', 'walkthrough');
-  fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const file = path.join(dir, `${course}-lab${labNumber}-${stamp}.json`);
-  fs.writeFileSync(file, JSON.stringify(r, null, 2));
-  console.log(`Report: ${path.relative(path.join(__dirname, '..'), file)}`);
+  const filename = `${course}-lab${labNumber}-${stamp}.json`;
+  const payload = JSON.stringify(r, null, 2);
+
+  // 1. Local copy under the repo (always — useful for tail/inspect on EC2).
+  const localDir = path.join(__dirname, '..', 'test-results', 'walkthrough');
+  fs.mkdirSync(localDir, { recursive: true });
+  const localFile = path.join(localDir, filename);
+  fs.writeFileSync(localFile, payload);
+  console.log(`Report (local): ${path.relative(path.join(__dirname, '..'), localFile)}`);
+
+  // 2. Drive copy at courses/<Course>/test_results/<filename>.json, if
+  //    RESULTS_DRIVE_DIR is set or we can guess from a known CLAUDE.md layout.
+  //    Convention: env RESULTS_DRIVE_DIR points at the per-course test_results
+  //    folder. When unset, we still drop to local — but the user has to copy.
+  const driveDir = process.env.RESULTS_DRIVE_DIR;
+  if (driveDir) {
+    try {
+      fs.mkdirSync(driveDir, { recursive: true });
+      const driveFile = path.join(driveDir, filename);
+      fs.writeFileSync(driveFile, payload);
+      // Also write a stable "latest.json" symlink-equivalent (copy) so
+      // a cross-machine reader doesn't need to know the timestamp.
+      fs.writeFileSync(path.join(driveDir, `${course}-lab${labNumber}-latest.json`), payload);
+      console.log(`Report (drive): ${driveFile}`);
+    } catch (e: any) {
+      console.log(`(could not write to RESULTS_DRIVE_DIR=${driveDir}: ${e.message})`);
+    }
+  }
 }
 
 function saveCheckReport(findings: Finding[], course: string, labNumber: number): void {
