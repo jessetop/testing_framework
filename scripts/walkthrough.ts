@@ -124,7 +124,9 @@ async function preRunAwsCleanup(opts: { studentId: string; region: string }): Pr
   const allBuckets = exec(`aws s3api list-buckets --query "Buckets[?starts_with(Name, '${studentId}-')].Name" --output text`)
     .split(/\s+/).filter(Boolean);
   const PROTECTED_BUCKET_PATTERNS = [
-    /-terraform-state-/,  // Lab 1 state backend; shared with Labs 2-4
+    /-terraform-state-/,        // Lab 1 state backend; shared with Labs 2-4
+    /-pipeline-artifacts-/,     // Lab 3 CodePipeline artifact store; required across re-runs
+    /-codebuild-/,              // Lab 3 CodeBuild artifact buckets, if any with this prefix
   ];
   const buckets: string[] = [];
   for (const b of allBuckets) {
