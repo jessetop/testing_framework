@@ -6,10 +6,10 @@ Last updated: 2026-05-15
 
 | Lab | Status | Last run pass / fail / manual / drift |
 |---|---|---|
-| Lab 1 (Multi-Environment State Strategy) | **Green** | 24 / 0 / 10 / 1 (drift cosmetic — fixed in run 13 expected) |
-| Lab 2 (Import Legacy Application) | **In flight** — run 2 (with DEPLOY_REGION + pre-staged repo) |
-| Lab 3 (Pipeline Operations) | Not started |
-| Lab 4 (Auditing & Observability) | Not started |
+| Lab 1 (Multi-Environment State Strategy) | **Green** | 24 / 0 / 10 / 1 (step 20 cd patch applied; step 21 drift expected to clear) |
+| Lab 2 (Import Legacy Application) | **Blocked** — persistent shell hangs at step 15 (`ls/cat` blocks) | 4 / 18 / 4 (run 1; runs 2-6 hang before report) |
+| Lab 3 (Pipeline Operations) | **Baseline established** | 11 / 7 / 13 (run 3, --steps 1-31; step 32 git push to CodeCommit was hanging) |
+| Lab 4 (Auditing & Observability) | **In flight** — run 1 (baseline) | — |
 
 ## How to resume
 
