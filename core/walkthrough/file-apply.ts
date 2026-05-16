@@ -22,7 +22,7 @@ import * as fs from 'fs';
 
 export interface ApplyResult {
   wrote: string;
-  strategy: 'smart-merge' | 'block-replace' | 'overwrite' | 'create';
+  strategy: 'smart-merge' | 'block-replace' | 'overwrite' | 'create' | 'skip-fragment';
   changes: string[];
 }
 
@@ -74,9 +74,43 @@ export function applyFileContent(
     return { wrote: filePath, strategy: 'block-replace', changes: hclResult.changes };
   }
 
+  // Strategy 2b: HCL fragment — the block-content's top construct is a NESTED-only
+  // block type (backend/required_providers/lifecycle/etc.). These belong inside a
+  // parent block; using them as a whole-file replacement produces invalid HCL
+  // ("Blocks of type X are not expected here"). Skip the write rather than
+  // overwrite the file. The pre-substitute pass on workspace setup (preSubstituteWorkspace
+  // in runner.ts) already handles the in-file edits these fragments are meant to
+  // represent. Treat the markdown block as documentation.
+  if (isHclFragment(withSubs)) {
+    return { wrote: filePath, strategy: 'skip-fragment', changes: ['(nested-only HCL fragment; existing file preserved — relying on workspace pre-substitution)'] };
+  }
+
   // Strategy 3: full overwrite.
   fs.writeFileSync(filePath, withSubs);
   return { wrote: filePath, strategy: 'overwrite', changes: ['(file fully replaced)'] };
+}
+
+/**
+ * Detect HCL "fragments" — content whose top-level construct is a NESTED-only
+ * block type. Lab MDs often show such fragments out of context, expecting the
+ * student to nest them inside an existing parent. Writing the fragment as a
+ * whole file produces invalid HCL.
+ */
+function isHclFragment(block: string): boolean {
+  const firstNonComment = block.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#'));
+  if (!firstNonComment) return false;
+  const m = firstNonComment.match(/^([a-z_]+)\b/);
+  if (!m) return false;
+  const nestedOnlyTypes = new Set([
+    'backend',
+    'required_providers',
+    'lifecycle',
+    'connection',
+    'provisioner',
+    'dynamic',
+    'default_tags',
+  ]);
+  return nestedOnlyTypes.has(m[1]);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
