@@ -412,25 +412,53 @@ export function primeStateBucket(
   if (override) {
     outputCache.state_bucket_name = override;
     console.log(`  · prime state_bucket_name=${override} (from STATE_BUCKET_NAME env)`);
-    return;
-  }
-  const studentId = env.TERRAFORM_STUDENT_ID || env.STUDENT || env.USER;
-  if (!studentId) return;
-  try {
-    const cmd = `aws s3api list-buckets --query "Buckets[?starts_with(Name, '${studentId}-terraform-state-')].Name" --output text`;
-    const found = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 })
-      .toString()
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
-    if (found.length === 1) {
-      outputCache.state_bucket_name = found[0];
-      console.log(`  · prime state_bucket_name=${found[0]} (discovered)`);
-    } else if (found.length > 1) {
-      console.log(`  · WARN: multiple state buckets for ${studentId}: ${found.join(', ')} — leaving unset; pass STATE_BUCKET_NAME to disambiguate`);
+  } else {
+    const studentId = env.TERRAFORM_STUDENT_ID || env.STUDENT || env.USER;
+    if (!studentId) return;
+    try {
+      const cmd = `aws s3api list-buckets --query "Buckets[?starts_with(Name, '${studentId}-terraform-state-')].Name" --output text`;
+      const found = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 })
+        .toString()
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      if (found.length === 1) {
+        outputCache.state_bucket_name = found[0];
+        console.log(`  · prime state_bucket_name=${found[0]} (discovered)`);
+      } else if (found.length > 1) {
+        console.log(`  · WARN: multiple state buckets for ${studentId}: ${found.join(', ')} — leaving unset; pass STATE_BUCKET_NAME to disambiguate`);
+        return;
+      } else {
+        return;
+      }
+    } catch {
+      return;
     }
+  }
+
+  // Capture the bucket's actual region too. The backend `region` setting names
+  // the BUCKET's region, not the deploy region — they're independent. Labs
+  // 2/3/4 reference Lab 1's bucket; if Lab 1's bucket is in a different region
+  // than the current lab's deploy region, the lab's hardcoded
+  // `-backend-config="region=..."` (or backend block) needs the bucket's region.
+  try {
+    const bucket = outputCache.state_bucket_name;
+    const regionOverride = env.STATE_BUCKET_REGION;
+    if (regionOverride) {
+      outputCache.state_bucket_region = regionOverride;
+      console.log(`  · prime state_bucket_region=${regionOverride} (from STATE_BUCKET_REGION env)`);
+      return;
+    }
+    const out = execSync(
+      `aws s3api get-bucket-location --bucket "${bucket}" --query LocationConstraint --output text`,
+      { stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 },
+    ).toString().trim();
+    // AWS quirk: us-east-1 returns "None" / null / empty for legacy reasons.
+    const region = !out || out === 'None' || out === 'null' ? 'us-east-1' : out;
+    outputCache.state_bucket_region = region;
+    console.log(`  · prime state_bucket_region=${region} (discovered for ${bucket})`);
   } catch {
-    /* discovery is best-effort — silent failure */
+    /* best-effort */
   }
 }
 
