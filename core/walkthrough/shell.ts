@@ -65,6 +65,10 @@ export class PersistentShell {
   private stderrBuf = '';
   private stdoutListeners: Array<(chunk: string) => void> = [];
   private stderrListeners: Array<(chunk: string) => void> = [];
+  /** Set when the bash subprocess emits `exit` or `close`. Pending run()
+   *  loops break out and surface a synthetic failure rather than waiting
+   *  forever for an end-of-command marker that will never arrive. */
+  private childExitCode: number | null = null;
 
   constructor(opts: ShellOptions) {
     this.cwd = path.resolve(opts.cwd);
@@ -89,6 +93,12 @@ export class PersistentShell {
     this.child.stderr.on('data', (chunk: string) => {
       this.stderrBuf += chunk;
       for (const l of this.stderrListeners) l(chunk);
+    });
+    this.child.on('exit', (code, signal) => {
+      this.childExitCode = code === null ? (signal ? 128 : -1) : code;
+    });
+    this.child.on('close', () => {
+      if (this.childExitCode === null) this.childExitCode = -1;
     });
     // Disable terminal control sequences and PS1 noise to keep output clean.
     await this.send('export PS1=""; export PS2=""; set +o history; export TERM=dumb');
@@ -144,6 +154,20 @@ export class PersistentShell {
           stderr: stderrCaptured,
           exitCode,
           cwdAfter: newCwd,
+          durationMs: Date.now() - started,
+          timedOut: false,
+        };
+      }
+      // Bail out fast if the subshell itself has died — the marker can never
+      // arrive in that case so the 10-minute deadline would just stall the
+      // run for no reason.
+      if (this.childExitCode !== null) {
+        return {
+          command,
+          stdout: this.stdoutBuf,
+          stderr: `${this.stderrBuf}\n[shell exited with code ${this.childExitCode} before marker]`,
+          exitCode: this.childExitCode === 0 ? 1 : this.childExitCode,
+          cwdAfter: this.cwd,
           durationMs: Date.now() - started,
           timedOut: false,
         };
