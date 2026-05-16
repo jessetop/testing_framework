@@ -283,6 +283,17 @@ async function main(): Promise<void> {
       // a username and the runner never reaches printSummary.
       GIT_TERMINAL_PROMPT: '0',
       GIT_ASKPASS: '/bin/echo',
+      // Workspace HOME is sandboxed, so the host's ~/.gitconfig isn't visible.
+      // `git commit` then errors with "Author identity unknown" — and the
+      // surrounding compound (`git checkout -b main && git add . && git commit
+      // && git push`) presents as a push failure ("src refspec main does not
+      // match any"), which is misleading. Setting GIT_AUTHOR_* and
+      // GIT_COMMITTER_* directly bypasses the config-file lookup. Values use
+      // studentId for traceability in CodeCommit history.
+      GIT_AUTHOR_NAME: studentId,
+      GIT_AUTHOR_EMAIL: `${studentId}@walkthrough.local`,
+      GIT_COMMITTER_NAME: studentId,
+      GIT_COMMITTER_EMAIL: `${studentId}@walkthrough.local`,
       // Pass LAB_REPO_ROOT through so the runner's clone-redirect knows
       // where the locally-patched copy of the lab repo lives.
       ...(process.env.LAB_REPO_ROOT ? { LAB_REPO_ROOT: process.env.LAB_REPO_ROOT } : {}),
