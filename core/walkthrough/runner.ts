@@ -442,10 +442,12 @@ export function compareOutput(expected: string, actual: string): boolean {
   const lines = e.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 3);
   for (const line of lines) {
     // Mask placeholders so "vpc-xxxxxx" matches "vpc-0abcdef123".
+    // Threshold of 2+ x's catches "userxx" / "XX" placeholders too — legitimate
+    // strings rarely have 2 consecutive x's outside placeholder conventions.
     const escaped = line
       .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       .replace(/<[^>]+>/g, '.*')
-      .replace(/x{3,}/gi, '.*');
+      .replace(/x{2,}/gi, '.*');
     if (!new RegExp(escaped).test(actual)) return false;
   }
   return true;
