@@ -262,6 +262,12 @@ async function main(): Promise<void> {
       // aws-cli probes especially). Mirror AWS_REGION into it so the labs
       // work whether they reach for AWS_REGION or DEPLOY_REGION.
       DEPLOY_REGION: region,
+      // Prevent `git push origin main` (and other auth-prompt commands)
+      // from hanging on stdin when no credentials are configured. Labs 2/3
+      // push to CodeCommit; without this, git blocks forever waiting for
+      // a username and the runner never reaches printSummary.
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_ASKPASS: '/bin/echo',
       // Pass LAB_REPO_ROOT through so the runner's clone-redirect knows
       // where the locally-patched copy of the lab repo lives.
       ...(process.env.LAB_REPO_ROOT ? { LAB_REPO_ROOT: process.env.LAB_REPO_ROOT } : {}),
