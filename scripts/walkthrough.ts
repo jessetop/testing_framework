@@ -117,9 +117,24 @@ async function preRunAwsCleanup(opts: { studentId: string; region: string }): Pr
     }
   }
 
-  // 2. S3 buckets prefixed studentNN-terraform-state-
-  const buckets = exec(`aws s3api list-buckets --query "Buckets[?starts_with(Name, '${studentId}-')].Name" --output text`)
+  // 2. S3 buckets prefixed studentNN- / userNN-
+  //    EXCLUDES Lab 1's shared state bucket (matches `*-terraform-state-*`).
+  //    Lab 4 reads from this bucket via terraform_remote_state; deleting it
+  //    between runs is the bug the user flagged 3x. Leave it alone.
+  const allBuckets = exec(`aws s3api list-buckets --query "Buckets[?starts_with(Name, '${studentId}-')].Name" --output text`)
     .split(/\s+/).filter(Boolean);
+  const PROTECTED_BUCKET_PATTERNS = [
+    /-terraform-state-/,  // Lab 1 state backend; shared with Labs 2-4
+  ];
+  const buckets: string[] = [];
+  for (const b of allBuckets) {
+    const protector = PROTECTED_BUCKET_PATTERNS.find((re) => re.test(b));
+    if (protector) {
+      console.log(`  · s3 PRESERVE ${b} (matches ${protector}) — shared state, not deleting`);
+    } else {
+      buckets.push(b);
+    }
+  }
   for (const b of buckets) {
     console.log(`  · s3 empty + remove ${b}`);
     // Versioned bucket — need to delete all versions + delete markers first.
