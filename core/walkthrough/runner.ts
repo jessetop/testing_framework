@@ -71,6 +71,20 @@ export class WalkthroughRunner {
     // cleanup preserves this bucket (see PROTECTED_BUCKET_PATTERNS in walkthrough.ts).
     primeStateBucket(this.outputCache, this.ctx.env as Record<string, string>);
 
+    // Pre-substitute placeholders in workspace .tf / .tfvars files.
+    // Lab repos ship with literal `studentXX-terraform-state-SUFFIX` (and
+    // similar) in provider blocks and example tfvars. Without this, lab steps
+    // that say "edit your file with the actual value" either rely on manual
+    // student action or on file-content blocks that the smart-merge can mishandle
+    // (e.g. Lab 3 step 6 overwriting providers.tf with just the backend fragment).
+    // Substituting in place at workspace setup time matches what a careful student
+    // would do manually, and is safe because the substitution patterns are tight.
+    preSubstituteWorkspace(
+      this.ctx.initialCwd,
+      this.outputCache,
+      this.ctx.env as Record<string, string>,
+    );
+
     const stepsToRun = this.parsedLab.steps.filter(opts.stepFilter || (() => true));
     const results: StepResult[] = [];
     for (const step of stepsToRun) {
@@ -459,6 +473,57 @@ export function primeStateBucket(
     console.log(`  · prime state_bucket_region=${region} (discovered for ${bucket})`);
   } catch {
     /* best-effort */
+  }
+}
+
+/**
+ * Walk the workspace's `.tf` / `.tfvars` files and substitute placeholders in
+ * place. Called once at runner startup, after primeStateBucket().
+ *
+ * Lab repos ship with literal placeholders (`studentXX-terraform-state-SUFFIX`,
+ * `account = "userxx"`, etc.) in `providers.tf`, `terraform.tfvars.example`, and
+ * sometimes `main.tf`. The lab MD then tells the student to manually edit these.
+ * The walkthrough runner can't reliably reproduce manual edits via file-content
+ * blocks alone (smart-merge struggles with HCL fragments — see Lab 3 step 6).
+ *
+ * Pre-substituting on workspace setup is the same change a careful student
+ * would make. The patterns we substitute are tight (see applyPlaceholderSubstitutions)
+ * so accidental matches in unrelated code are unlikely.
+ *
+ * Best-effort: failures (missing dirs, unreadable files) are silently skipped.
+ */
+export function preSubstituteWorkspace(
+  workspaceRoot: string,
+  outputCache: Record<string, string>,
+  env: Record<string, string>,
+): void {
+  if (!outputCache.state_bucket_name) return;  // nothing useful to substitute
+  let editedFiles = 0;
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch { return; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.terraform') continue;
+        walk(full);
+      } else if (entry.isFile() && /\.(tf|tfvars|tfvars\.example)$/i.test(entry.name)) {
+        try {
+          const before = fs.readFileSync(full, 'utf8');
+          const after = applyPlaceholderSubstitutions(before, outputCache, env);
+          if (after !== before) {
+            fs.writeFileSync(full, after);
+            editedFiles++;
+          }
+        } catch { /* skip unreadable */ }
+      }
+    }
+  };
+  walk(workspaceRoot);
+  if (editedFiles > 0) {
+    console.log(`  · pre-substitute: rewrote ${editedFiles} workspace file(s) with primed placeholders`);
   }
 }
 
