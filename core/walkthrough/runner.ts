@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+import { execSync } from 'child_process';
 import { StepStrategy, automatableStrategies } from '../inventory';
 import {
   ParsedLab, ParsedStep, CodeBlock, RunContext, RunReport,
@@ -62,6 +63,13 @@ export class WalkthroughRunner {
     const start = Date.now();
     this.shell = new PersistentShell({ cwd: this.ctx.initialCwd, env: this.ctx.env });
     await this.shell.start();
+
+    // Prime outputCache from prior-lab state — labs 2/3/4 reference Lab 1's
+    // S3 state bucket via literal placeholders (studentXX-terraform-state-SUFFIX).
+    // If STATE_BUCKET_NAME is set in env, use it directly. Otherwise discover by
+    // listing buckets matching ${studentId}-terraform-state-*. Lab 1's pre-run
+    // cleanup preserves this bucket (see PROTECTED_BUCKET_PATTERNS in walkthrough.ts).
+    primeStateBucket(this.outputCache, this.ctx.env as Record<string, string>);
 
     const stepsToRun = this.parsedLab.steps.filter(opts.stepFilter || (() => true));
     const results: StepResult[] = [];
@@ -382,6 +390,50 @@ export class WalkthroughRunner {
  * Idempotent: if LAB_REPO_ROOT isn't set or the block doesn't contain a
  * matching clone, returns the input unchanged.
  */
+/**
+ * Populate outputCache.state_bucket_name so labs 2/3/4 can resolve cross-lab
+ * references to Lab 1's S3 state bucket.
+ *
+ * Resolution order:
+ *   1. env.STATE_BUCKET_NAME (explicit override; for CI / local runs)
+ *   2. aws s3api list-buckets with prefix `${studentId}-terraform-state-`
+ *      (Lab 1's preserved bucket — see PROTECTED_BUCKET_PATTERNS in walkthrough.ts)
+ *   3. Leave unset; the lab will fail loudly with a clear error.
+ *
+ * Errors are swallowed — discovery is best-effort and the lab can still set
+ * its own state_bucket_name via the in-lab terraform output capture.
+ */
+export function primeStateBucket(
+  outputCache: Record<string, string>,
+  env: Record<string, string>,
+): void {
+  if (outputCache.state_bucket_name) return;
+  const override = env.STATE_BUCKET_NAME;
+  if (override) {
+    outputCache.state_bucket_name = override;
+    console.log(`  · prime state_bucket_name=${override} (from STATE_BUCKET_NAME env)`);
+    return;
+  }
+  const studentId = env.TERRAFORM_STUDENT_ID || env.STUDENT || env.USER;
+  if (!studentId) return;
+  try {
+    const cmd = `aws s3api list-buckets --query "Buckets[?starts_with(Name, '${studentId}-terraform-state-')].Name" --output text`;
+    const found = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 })
+      .toString()
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (found.length === 1) {
+      outputCache.state_bucket_name = found[0];
+      console.log(`  · prime state_bucket_name=${found[0]} (discovered)`);
+    } else if (found.length > 1) {
+      console.log(`  · WARN: multiple state buckets for ${studentId}: ${found.join(', ')} — leaving unset; pass STATE_BUCKET_NAME to disambiguate`);
+    }
+  } catch {
+    /* discovery is best-effort — silent failure */
+  }
+}
+
 export function redirectLabRepoCloneToLocal(
   command: string,
   env: Record<string, string>,

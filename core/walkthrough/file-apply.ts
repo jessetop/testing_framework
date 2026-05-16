@@ -250,10 +250,21 @@ export function applyPlaceholderSubstitutions(
   outputs: Record<string, string>,
   env: Record<string, string>,
 ): string {
-  return content.replace(/<([a-z0-9_][a-z0-9_.-]*)>/gi, (match, inner) => {
+  let out = content.replace(/<([a-z0-9_][a-z0-9_.-]*)>/gi, (match, inner) => {
     const lookup = resolvePlaceholder(inner, outputs, env);
     return lookup ?? match;
   });
+  // Literal state-bucket placeholder pattern used in Day 3 Labs 2/3/4 lab MDs
+  // (`studentXX-terraform-state-SUFFIX`, `userXX-terraform-state-SUFFIX`) — replace
+  // with the primed/cached state_bucket_name. Without this, labs that read Lab 1's
+  // bucket fail at terraform init because the literal placeholder is passed to AWS.
+  if (outputs.state_bucket_name) {
+    out = out.replace(
+      /\b(?:student|user)[A-Z0-9]{2,}-terraform-state-[A-Z0-9]+\b/gi,
+      outputs.state_bucket_name,
+    );
+  }
+  return out;
 }
 
 function resolvePlaceholder(
