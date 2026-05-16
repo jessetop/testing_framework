@@ -6,10 +6,27 @@ Last updated: 2026-05-15
 
 | Lab | Status | Last run pass / fail / manual / drift |
 |---|---|---|
-| Lab 1 (Multi-Environment State Strategy) | **Green** | 24 / 0 / 10 / 1 (step 20 cd patch applied; step 21 drift expected to clear) |
-| Lab 2 (Import Legacy Application) | **Blocked** — persistent shell hangs at step 15 (`ls/cat` blocks) | 4 / 18 / 4 (run 1; runs 2-6 hang before report) |
-| Lab 3 (Pipeline Operations) | **Baseline established** | 11 / 7 / 13 (run 3, --steps 1-31; step 32 git push to CodeCommit was hanging) |
-| Lab 4 (Auditing & Observability) | **In flight** — run 1 (baseline) | — |
+| Lab 1 (Multi-Environment State Strategy) | **Green** | 24 / 0 / 10 / 1 (step 20 cd patch applied; step 21 drift expected to clear next run) |
+| Lab 2 (Import Legacy Application) | **Blocked on framework bug** — persistent shell hangs at step 15 | 4 / 18 / 4 (run 1 baseline; runs 2-6 hang before report) |
+| Lab 3 (Pipeline Operations) | **Partial baseline** — full run hangs at step 32's `git push` (see task #22) | 11 / 7 / 13 (run 3, --steps 1-31) |
+| Lab 4 (Auditing & Observability) | **Baseline established** — fails on Lab 1's bucket missing | 3 / 2 / 9 |
+
+## What's blocking each lab from green
+
+| Lab | Blocker | Type |
+|---|---|---|
+| Lab 1 | Step 21 cosmetic output drift (`userxx` placeholder in expected vs `user99` actual) | Lab content (one-line patch) |
+| Lab 2 | Persistent shell hang at step 15 (`ls/cat`) — no `git push` involved, true cause unknown | **Framework bug** (task #22) |
+| Lab 3 | Step 32 hangs on `git push origin main` to CodeCommit even with `GIT_TERMINAL_PROMPT=0` + non-interactive bash | **Framework / lab content** (skip pipeline-push steps in inventory? or set up actual CodeCommit creds?) |
+| Lab 4 | Steps 13-14 need Lab 1's state bucket; pre-cleanup destroys it between runs | **Multi-lab orchestration** (run labs in dependency order with shared state) |
+
+## Multi-lab orchestration
+
+The next big framework feature: a `run-all` that knows lab dependencies and either:
+- Runs Lab 1 → Lab 2 → Lab 3 → Lab 4 in order with state passed forward
+- Or runs each lab against a known-good state bucket pre-staged from a fixture run
+
+Today's setup tears down between labs (per the explicit per-run cleanup), so any lab that depends on a previous lab's state will always fail its deploy.
 
 ## How to resume
 
