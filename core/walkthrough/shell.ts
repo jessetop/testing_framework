@@ -79,7 +79,12 @@ export class PersistentShell {
   async start(): Promise<void> {
     if (this.child) return;
     fs.mkdirSync(this.cwd, { recursive: true });
-    this.child = spawn(this.bashPath, ['--noprofile', '--norc', '-i'], {
+    // NOTE: do NOT use bash -i (interactive). Interactive bash advertises a
+    // TTY to children, which makes `git push` and similar credential-using
+    // commands try to prompt for input regardless of GIT_TERMINAL_PROMPT=0.
+    // With --noprofile --norc and no -i we get a clean non-interactive shell
+    // that still persists state (cwd, vars) across `run()` calls.
+    this.child = spawn(this.bashPath, ['--noprofile', '--norc'], {
       cwd: this.cwd,
       env: this.env,
       stdio: ['pipe', 'pipe', 'pipe'],
