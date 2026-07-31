@@ -126,7 +126,9 @@ test.describe.serial('IO-107 Lab 1: End-to-End EKS Deployment Pipeline', () => {
     expect(sa).toMatch(/eks\.amazonaws\.com\/role-arn/);
     const valuesDev = fs.readFileSync(path.join(lab1Config.repoDir, 'charts', 'myapp', 'values-dev.yaml'), 'utf8');
     expect(valuesDev).toMatch(/replicaCount/);
-    expect(valuesDev).toMatch(/myapp-dev-role/);
+    // The fixture ships with an empty role-arn (injected by helm --set at deploy time).
+    // Just verify the annotation key is present; step 10a below fills in the real ARN.
+    expect(valuesDev).toMatch(/eks\.amazonaws\.com\/role-arn/);
   });
 
   test('Task 3 step 10a: substitute IRSA role ARN placeholder with per-student ARN', () => {
@@ -142,12 +144,17 @@ test.describe.serial('IO-107 Lab 1: End-to-End EKS Deployment Pipeline', () => {
 
     const file = path.join(lab1Config.repoDir, 'charts', 'myapp', 'values-dev.yaml');
     const before = fs.readFileSync(file, 'utf8');
-    // Replace any arn:aws:iam::*:role/myapp-dev-role with the real per-student ARN.
-    const after = before.replace(
-      /arn:aws:iam::[0-9]+:role\/myapp-dev-role/g,
-      realArn,
-    );
-    expect(after, 'IRSA ARN placeholder not found in values-dev.yaml — fixture changed?').not.toEqual(before);
+    // Handle two fixture shapes:
+    //   (a) placeholder ARN:  arn:aws:iam::123456789012:role/myapp-dev-role
+    //   (b) empty string:     eks.amazonaws.com/role-arn: ""
+    let after = before.replace(/arn:aws:iam::[0-9]+:role\/myapp-dev-role/g, realArn);
+    if (after === before) {
+      after = before.replace(
+        /(eks\.amazonaws\.com\/role-arn:\s*)["']?[^"'\n]*["']?/,
+        `$1"${realArn}"`,
+      );
+    }
+    expect(after, 'IRSA annotation key not found in values-dev.yaml — fixture changed?').not.toEqual(before);
     fs.writeFileSync(file, after);
 
     // Sanity-check the substitution landed.
